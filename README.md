@@ -46,6 +46,6 @@ linisreport
 
 ### Raccourcis Clavier
 
-|Touche|Action|
-|------|------|
+| Touche |                Action                 |
+|--------|---------------------------------------|
 |`Entrer`|Ouvrir l'audit ou l'élément sélectionné|
