@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -452,7 +453,10 @@ class LinisReportApp(App):
     """
 
     TITLE = "linisreport"
-    SUB_TITLE = "Lynis audit viewer"
+    @property
+    def SUB_TITLE(self) -> str:
+        mode = "ROOT" if os.geteuid() == 0 else "USER"
+        return f"Lynis audit viewer (Mode: {mode})"
 
     def on_mount(self) -> None:
         self.push_screen(AuditListScreen())

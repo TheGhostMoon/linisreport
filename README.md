@@ -38,14 +38,55 @@ pip install -e .
 
 ## 📖 Utilisation
 
-Lancez simplement la commande :
+### Mode automatique (Recommandé)
+
+Par défaut, Lynis sauvegarde ses rapports (`lynis.log` et `lynis-report.dat`) dans `/var/log/`. Ces fichiers sont protégés et appartiennent à l'utilisateur `root`.
+
+Pour que **LinisReport** détecte et lise automatiquement ces fichiers sans aucune configuration manuelle, lancez-le avec `sudo` :
 
 ```bash
-linisreport
+# Si installé globalement
+sudo linisreport
+
+# Si installé dans un environnement virtuel (venv)
+sudo ./.venv/bin/linisreport
 ```
+
+L'outil scannera automatiquement `/var/log` et affichera votre dernier audit.
+
+### Mode fichier (Sans root)
+Si vous ne souhaitez pas lancer l'outil en root ou si vous analysez des rapports récupérés d'une autre machine, placez simplement les fichiers dans un dossier local (ex: `~/lynis-audits/`) et lancez l'outil normalement.
 
 ### Raccourcis Clavier
 
-| Touche |                Action                 |
-|--------|---------------------------------------|
-|`Entrer`|Ouvrir l'audit ou l'élément sélectionné|
+| Touche   | Action                                             |
+|----------|----------------------------------------------------|
+| `Entrer` | Ouvrir l'audit ou l'élément sélectionné            |
+| `Esc`    | Retour à l'écran précédent                         |
+| `/`      | Rechercher (dans les listes ou le rapport)         |
+| `w`      | Afficher/Masquer les Warnings                      |
+| `s`      | Afficher/Masquer les Suggestions                   |
+| `p`      | Ouvrir les détails bruts du rapport (Report Viewer)|
+| `x`      | Exporter l'audit courant en JSON                   |
+| `q`      | Quitter l'application                              |
+
+## 🏗️ Architecture
+
+Le projet est construit avec Textual (Python TUI framework) et structuré comme suit :
+ - `app.py` : Gestion de l'interface (Screens, Widgets).
+ - `model.py` : Structures de données (Dataclasses).
+ - `parser/` : Logique d'extraction des fichiers Lynis.
+ - `discovery.py` : Recherche des fichiers sur le disque.
+
+## 🤝 Contribuer
+
+Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une "Issue" ou à proposer une "Pull Request".
+ 1. Forkez le projet.
+ 2. Créez votre branche (`git checkout -b feature/AmazingFeature`).
+ 3. Commitez vos changements (`git commit -m 'Add some AmazingFeature`).
+ 4. Pushez sur la branche (`git push origin feature/AmazingFeature`).
+ 5. Ouvrez une Pull Request.
+
+## 📄 Licence
+
+Distribué sous la licence MIT. Voir `LICENSE` pour plus d'information
