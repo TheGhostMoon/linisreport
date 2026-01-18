@@ -1,8 +1,8 @@
 # linisreport/app.py
 from __future__ import annotations
 
-import json
 import os
+import json
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -47,6 +47,7 @@ def _audit_title(a: Audit) -> str:
     w = a.meta.warnings_count if a.meta.warnings_count is not None else len(a.warnings())
     s = a.meta.suggestions_count if a.meta.suggestions_count is not None else len(a.suggestions())
     
+    # Affichage du chemin pour distinguer les audits
     path = str(a.meta.source.root_dir) if a.meta.source else "?"
     return f"{date}  {host}  score:{score}  W:{w}  S:{s}    [dim]{path}[/dim]"
 
@@ -58,8 +59,28 @@ def _category_stats(findings: List[Finding]) -> Tuple[int, int]:
 
 
 # -------------------------
-# ListItem wrappers
+# Components
 # -------------------------
+
+class ScoreWidget(Static):
+    """Affiche une barre de progression pour le score."""
+    
+    def __init__(self, score: int) -> None:
+        super().__init__()
+        self.score = score
+
+    def compose(self) -> ComposeResult:
+        color = "red"
+        if self.score > 60: color = "yellow"
+        if self.score > 80: color = "green"
+
+        yield Label(f"Hardening Index: {self.score}/100")
+        
+        bar = ProgressBar(total=100, show_eta=False)
+        bar.update(progress=self.score) # Utilisation de update() pour éviter le crash
+        bar.styles.color = color 
+        yield bar
+
 
 class AuditItem(ListItem):
     def __init__(self, audit: Audit) -> None:
@@ -81,28 +102,6 @@ class FindingItem(ListItem):
         tid = finding.test_id or finding.finding_id
         super().__init__(Label(f"[{badge}] {tid} — {finding.message}"))
         self.finding = finding
-
-
-class ScoreWidget(Static):
-    """Affiche une barre de progression pour le score."""
-    
-    def __init__(self, score: int) -> None:
-        super().__init__()
-        self.score = score
-
-    def compose(self) -> ComposeResult:
-        color = "red"
-        if self.score > 60: color = "yellow"
-        if self.score > 80: color = "green"
-
-        yield Label(f"Hardening Index: {self.score}/100")
-        
-        bar = ProgressBar(total=100, show_eta=False)
-        
-        bar.update(progress=self.score)
-        
-        bar.styles.color = color 
-        yield bar
 
 
 # -------------------------
@@ -215,21 +214,18 @@ class AuditHomeScreen(Screen):
         )
 
         yield ScoreWidget(score_val)
-        yield Label("\nPick a category:", classes="section_title")
+        yield Label("\nPick a category:", classes="section_title") 
         yield ListView(id="category_list")
         yield Footer()
 
     def on_mount(self) -> None:
         lv = self.query_one("#category_list", ListView)
         by_cat = self.audit.by_category()
-
         cats = sorted([c for c in by_cat.keys() if c != "Uncategorized"])
         if "Uncategorized" in by_cat:
             cats.append("Uncategorized")
-
         for c in cats:
             lv.append(CategoryItem(c, by_cat[c]))
-
         if lv.children:
             lv.index = 0
         lv.focus()
@@ -249,14 +245,11 @@ class FindingsScreen(Screen):
         ("/", "focus_search", "Search"),
     ]
 
-    AUTO_FOCUS = "#findings_list"
-
     def __init__(self, audit: Audit, category: str, findings: List[Finding]) -> None:
         super().__init__()
         self.audit = audit
         self.category = category
         self._all = list(findings)
-        
         self._show_warnings = True
         self._show_suggestions = True
         self._search_query = ""
@@ -276,26 +269,23 @@ class FindingsScreen(Screen):
     def on_mount(self) -> None:
         self._update_view()
         self._render_list()
+        # Focus sur la liste pour naviguer direct
+        self.query_one("#findings_list").focus()
 
     def _update_view(self) -> None:
         filtered = []
         query = self._search_query.lower()
-        
         for f in self._all:
             if f.ftype == FindingType.WARNING and not self._show_warnings:
                 continue
             if f.ftype == FindingType.SUGGESTION and not self._show_suggestions:
                 continue
-            
             if query:
                 blob = f"{f.message} {f.test_id or ''} {f.finding_id}".lower()
                 if query not in blob:
                     continue
-            
             filtered.append(f)
-
         self._view = filtered
-        # Si on est déjà monté, on rend. Sinon on attend que on_mount le fasse.
         if self.is_mounted:
             self._render_list()
 
@@ -343,7 +333,6 @@ class FindingDetailScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-
         f = self.finding
         badge = "WARNING" if f.ftype == FindingType.WARNING else "SUGGESTION"
         tid = f.test_id or f.finding_id
@@ -364,7 +353,6 @@ class FindingDetailScreen(Screen):
             Static("\n".join(f.evidence or ["(no evidence captured)"]), id="detail_evidence"),
             id="detail_scroll",
         )
-
         yield Footer()
 
 
@@ -384,39 +372,25 @@ class ReportScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-
         meta = self.audit.meta
         host = meta.hostname or "unknown-host"
         date = _fmt_dt(meta.started_at)
-        score = f"{meta.hardening_index}" if meta.hardening_index is not None else "?"
-        distro = " ".join(x for x in [meta.distro, meta.distro_version] if x) or "unknown distro"
-        kernel = meta.kernel or "unknown kernel"
-
+        
         yield Static(
             "\n".join(
                 [
                     f"Report viewer — {date} — {host}",
-                    f"System: {distro} | kernel: {kernel}",
-                    f"Hardening index: {score} | warnings: {len(self.audit.warnings())} | suggestions: {len(self.audit.suggestions())}",
-                    "",
                     "Search: press / then type.  (c = clear)",
                 ]
             ),
             id="report_header",
         )
-
         yield Input(placeholder="Filter keys/values…", id="report_search")
-
-        yield ScrollableContainer(
-            Static("", id="report_body"),
-            id="report_scroll",
-        )
-
+        yield ScrollableContainer(Static("", id="report_body"), id="report_scroll")
         yield Footer()
 
     def on_mount(self) -> None:
         extra = self.audit.meta.extra or {}
-
         lines: List[str] = []
         for k in sorted(extra.keys()):
             v = extra[k]
@@ -434,8 +408,7 @@ class ReportScreen(Screen):
         self._populate_report()
         
         self.query_one("#report_search", Input).blur()
-        
-        # [FIX] On rend le container navigable et on lui donne le focus
+        # Focus sur le scroll pour permettre navigation directe
         scroll = self.query_one("#report_scroll")
         scroll.can_focus = True
         scroll.focus()
@@ -453,7 +426,6 @@ class ReportScreen(Screen):
         self._filtered_lines = list(self._all_lines)
         self._populate_report()
         inp.blur()
-        # [FIX] Redonner le focus au scroll après avoir quitté la recherche
         self.query_one("#report_scroll").focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -467,16 +439,11 @@ class ReportScreen(Screen):
         self._populate_report()
 
 
-# -------------------------
-# App
-# -------------------------
-
 class LinisReportApp(App):
     CSS = """
     #status { padding: 1 2; }
     #audit_meta { padding: 1 2; }
     
-    /* Style pour le nouveau widget de score */
     ScoreWidget {
         padding: 1 2;
         height: auto;
@@ -486,11 +453,21 @@ class LinisReportApp(App):
         padding-left: 2;
         color: $text-muted;
     }
+
+    #findings_title { padding: 1 2; }
+    #detail_scroll { padding: 1 2; }
+    #detail_header { margin-bottom: 1; }
+    
+    #report_scroll:focus {
+        border: heavy $accent;
+    }
     """
 
     TITLE = "linisreport"
+    
     @property
     def SUB_TITLE(self) -> str:
+        # Affiche si l'utilisateur est root ou non
         mode = "ROOT" if os.geteuid() == 0 else "USER"
         return f"Lynis audit viewer (Mode: {mode})"
 
