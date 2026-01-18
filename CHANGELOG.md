@@ -3,9 +3,21 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 ## [Unreleased]
-*Ici, on note ce qu'on fait en attendant la prochaine version.*
 
-## [1.0.0] - 2024-XX-XX
+## [1.1.0] - 2026-01-18
+### Added
+- **Archivage (Snapshot)** : Touche `a` pour sauvegarder un audit Live (`/var/log`) vers un dossier (`~/.local/share/linisreport/snapshots`).
+- **Suppression** : Touche `d` pour supprimer une archive existante.
+- **Auto-Reload** : La liste des audits se met à jour automatiquement après une suppression.
+- Affichage du chemin du fichier dans la liste principale pour distinguer les doublons.
+- Indicateur visuel "LIVE REPORT" vs "ARCHIVE" dans l'en-tête de l'audit.
+
+### Changed
+- Amélioration de la gestion des erreurs si un rapport est illisible (filtrage automatique).
+- Le titre de l'application indique désormais le mode d'exécution (ROOT ou USER).
+- Documentation mise à jour avec la méthode d'installation globale (symlink).
+
+## [1.0.0] - 2024-01-17
 ### Added
 - Première version stable (V1).
 - Détection automatique des audits dans `/var/log` et `~/lynis-audits`.

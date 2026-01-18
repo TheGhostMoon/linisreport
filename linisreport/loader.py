@@ -19,16 +19,13 @@ class LoadConfig:
 def load_audit(source: AuditSource, config: Optional[LoadConfig] = None) -> Audit:
     cfg = config or LoadConfig()
 
-    # 1. Chargement des métadonnées
     meta = extract_meta(source)
 
-    # Fallback pour la date si absente du rapport
     if meta.started_at is None:
         meta.started_at = _best_effort_started_at(source)
         if meta.started_at:
             meta.audit_id = make_audit_id(source.as_key(), meta.started_at)
 
-    # 2. Chargement des résultats
     findings = _load_findings(source)
 
     audit = Audit(meta=meta, findings=findings)
@@ -46,9 +43,6 @@ def load_many(sources: List[AuditSource], config: Optional[LoadConfig] = None) -
     for s in sources:
         audit = load_audit(s, cfg)
         
-        # --- FILTRE DE VALIDITÉ ---
-        # Si on n'a ni score, ni findings, ni hostname, c'est que le fichier 
-        # était probablement illisible (Permission denied) ou vide.
         is_empty = (
             audit.meta.hardening_index is None 
             and not audit.findings
@@ -66,8 +60,6 @@ def _load_findings(source: AuditSource) -> List[Finding]:
     if not log_path or not log_path.is_file():
         return []
     
-    # Si on n'a pas les droits de lecture, parse_log renverra une liste vide
-    # (le try/except est géré dans le parser)
     return parse_log(log_path)
 
 

@@ -24,6 +24,7 @@ from textual.widgets import (
 from .discovery import discover_audits, DiscoveryConfig
 from .loader import load_many, LoadConfig
 from .model import Audit, Finding, FindingType
+from .storage import create_snapshot, delete_snapshot, is_stored_snapshot
 
 
 # -------------------------
@@ -164,7 +165,14 @@ class AuditListScreen(Screen):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         item = event.item
         if isinstance(item, AuditItem):
-            self.app.push_screen(AuditHomeScreen(item.audit))
+            self.app.push_screen(AuditHomeScreen(item.audit), self.on_audit_screen_closed)
+    
+    def on_audit_screen_closed(self, result: Optional[str] = None) -> None:
+        """
+        Cette fonction est appelée automatiquement quand AuditHomeScreen se ferme.
+        """
+        if result in ("deleted", "archived"):
+            self.action_reload()
 
 
 class AuditHomeScreen(Screen):
@@ -173,11 +181,14 @@ class AuditHomeScreen(Screen):
         ("q", "app.quit", "Quit"),
         ("p", "open_report", "Report"),
         ("x", "export_json", "Export JSON"),
+        ("a", "archive", "Archive"),
+        ("d", "delete", "Delete"),
     ]
 
     def __init__(self, audit: Audit) -> None:
         super().__init__()
         self.audit = audit
+        self._is_archive = is_stored_snapshot(audit)
 
     def action_open_report(self) -> None:
         self.app.push_screen(ReportScreen(self.audit))
@@ -192,20 +203,51 @@ class AuditHomeScreen(Screen):
         except Exception as e:
             self.notify(f"Erreur d'export : {e}", severity="error")
 
+    def action_archive(self) -> None:
+        """Archiver (Seulement si c'est un audit Live)."""
+        if self._is_archive:
+            self.notify("Ceci est déjà une archive. Utilisez 'd' pour la supprimer.", severity="warning")
+            return
+            
+        try:
+            dest = create_snapshot(self.audit)
+            self.notify(f"Audit archivé dans :\n{dest.name}", title="Snapshot créé", timeout=5)
+        except FileExistsError:
+            self.notify("Cet audit a déjà été archivé.", title="Doublon", severity="warning")
+        except Exception as e:
+            self.notify(f"Erreur d'archivage : {e}", severity="error")
+
+    def action_delete(self) -> None:
+        """Supprimer (Seulement si c'est une archive)."""
+        if not self._is_archive:
+            self.notify("Impossible de supprimer un audit Live (lecture seule).", severity="error")
+            return
+        
+        try:
+            delete_snapshot(self.audit)
+            self.notify("Archive supprimée avec succès.", title="Corbeille")
+            self.dismiss("deleted")
+            
+        except Exception as e:
+            self.notify(f"Erreur de suppression : {e}", severity="error")
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
 
         meta = self.audit.meta
         host = meta.hostname or "unknown-host"
         date = _fmt_dt(meta.started_at)
+        
         score_val = meta.hardening_index if meta.hardening_index is not None else 0
         distro = " ".join(x for x in [meta.distro, meta.distro_version] if x) or "unknown distro"
         kernel = meta.kernel or "unknown kernel"
 
+        type_label = "[bold blue]ARCHIVE[/]" if self._is_archive else "[bold green]LIVE REPORT[/]"
+
         yield Static(
             "\n".join(
                 [
-                    f"Audit: {date} — {host}",
+                    f"Audit: {date} — {host} — {type_label}",
                     f"System: {distro} | kernel: {kernel}",
                     f"Warnings: {len(self.audit.warnings())} | Suggestions: {len(self.audit.suggestions())}",
                 ]
@@ -221,11 +263,14 @@ class AuditHomeScreen(Screen):
     def on_mount(self) -> None:
         lv = self.query_one("#category_list", ListView)
         by_cat = self.audit.by_category()
+
         cats = sorted([c for c in by_cat.keys() if c != "Uncategorized"])
         if "Uncategorized" in by_cat:
             cats.append("Uncategorized")
+
         for c in cats:
             lv.append(CategoryItem(c, by_cat[c]))
+
         if lv.children:
             lv.index = 0
         lv.focus()
@@ -269,7 +314,6 @@ class FindingsScreen(Screen):
     def on_mount(self) -> None:
         self._update_view()
         self._render_list()
-        # Focus sur la liste pour naviguer direct
         self.query_one("#findings_list").focus()
 
     def _update_view(self) -> None:
@@ -408,7 +452,6 @@ class ReportScreen(Screen):
         self._populate_report()
         
         self.query_one("#report_search", Input).blur()
-        # Focus sur le scroll pour permettre navigation directe
         scroll = self.query_one("#report_scroll")
         scroll.can_focus = True
         scroll.focus()
