@@ -9,7 +9,6 @@ Une interface terminal moderne (TUI) pour analyser, filtrer et explorer les rapp
 LinisReport transforme les fichiers logs bruts de Lynis (`lynis.log` et `lynis-report.dat`) en un tableau de bord interactif, permettant de naviguer facilement dans les avertissements et suggestions de sécurité.
 
 ## 🚀 Fonctionnalités
-
 * **Auto-découverte** : Détecte automatiquement les audits présents dans `~/lynis-audits` ou `/var/log`.
 * **Tableau de bord** : Vue synthétique avec score de durcissement (hardening index), OS, kernel et statistiques.
 * **Navigation par catégorie** : Explorez les résultats groupés (SSH, Firewall, Kernel, etc.).
@@ -24,17 +23,45 @@ LinisReport transforme les fichiers logs bruts de Lynis (`lynis.log` et `lynis-r
 
 ### Prérequis
 * Python 3.10 ou supérieur.
-* Un système Linux/macOS (pour l'affichage correct du terminal).
+* Un système Linux/macOS.
 
-### Installation (Développement)
-
-Clonez ce dépôt et installez-le en mode éditable :
+### Option 1 : Installation Standard (Virtuelle)
+Idéal pour tester ou développer sans modifier le système.
 
 ```bash
 git clone https://github.com/TheGhostMoon/linisreport.git
 cd linisreport
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
+
+Pour le lancer, vous devrez utiliser le chemin complet :
+```bash
+sudo ./linisreport/.venv/bin/linisreport
+```
+
+### Option 2 : Installation Globale (Recommandé) 🌟
+Cette méthode rend la commande `linisreport` accessible partout dans votre terminal, simplifiant l'utilisation avec `sudo`.
+ 1. **Installez le projet** (comme dans l'option 1) :
+```bash
+cd linisreport
+python3 -m venv .venv
+source .venv/bin/activate
+pip install .
+```
+ 2. **Créez un lien système** vers l'exécutable :
+```bash
+# Cette commande lie votre installation locale au dossier des binaires système
+sudo ln -sf "$PWD/.venv/bin/linisreport" /usr/local/bin/linisreport
+```
+ 3. **Vérifiez l'installation** :
+Vous pouvez maintenant lancer l'outil depuis n'importe quel dossier :
+```bash
+sudo linisreport
+```
+
+> **Note :** Si vous déplacez ou supprimez le dossier du projet, la commande cessera de fonctionner. Pour désinstaller, supprimez simplement la commande : `sudo rm /usr/local/bin/linisreport`.
 
 ## 📖 Utilisation
 
