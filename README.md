@@ -31,7 +31,7 @@ LinisReport transforme les fichiers logs bruts de Lynis (`lynis.log` et `lynis-r
 Clonez ce dépôt et installez-le en mode éditable :
 
 ```bash
-git clone [https://github.com/VOTRE_USERNAME/linisreport.git](https://github.com/VOTRE_USERNAME/linisreport.git)
+git clone https://github.com/TheGhostMoon/linisreport.git
 cd linisreport
 pip install -e .
 ```
