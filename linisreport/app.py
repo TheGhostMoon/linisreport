@@ -18,6 +18,7 @@ from textual.widgets import (
     ListView,
     ListItem,
     Label,
+    ProgressBar,
 )
 
 from .discovery import discover_audits, DiscoveryConfig
@@ -45,7 +46,9 @@ def _audit_title(a: Audit) -> str:
     score = f"{a.meta.hardening_index}" if a.meta.hardening_index is not None else "?"
     w = a.meta.warnings_count if a.meta.warnings_count is not None else len(a.warnings())
     s = a.meta.suggestions_count if a.meta.suggestions_count is not None else len(a.suggestions())
-    return f"{date}  {host}  score:{score}  W:{w}  S:{s}"
+    
+    path = str(a.meta.source.root_dir) if a.meta.source else "?"
+    return f"{date}  {host}  score:{score}  W:{w}  S:{s}    [dim]{path}[/dim]"
 
 
 def _category_stats(findings: List[Finding]) -> Tuple[int, int]:
@@ -80,6 +83,28 @@ class FindingItem(ListItem):
         self.finding = finding
 
 
+class ScoreWidget(Static):
+    """Affiche une barre de progression pour le score."""
+    
+    def __init__(self, score: int) -> None:
+        super().__init__()
+        self.score = score
+
+    def compose(self) -> ComposeResult:
+        color = "red"
+        if self.score > 60: color = "yellow"
+        if self.score > 80: color = "green"
+
+        yield Label(f"Hardening Index: {self.score}/100")
+        
+        bar = ProgressBar(total=100, show_eta=False)
+        
+        bar.update(progress=self.score)
+        
+        bar.styles.color = color 
+        yield bar
+
+
 # -------------------------
 # Screens
 # -------------------------
@@ -107,12 +132,20 @@ class AuditListScreen(Screen):
         sources = discover_audits(DiscoveryConfig())
 
         if not sources:
-            status.update("No audits found. (Expected: /var/log/lynis.log + /var/log/lynis-report.dat, or archives.)")
+            status.update("No audits found. (Expected: /var/log/lynis.log or ~/lynis-audits/)")
             lv.clear()
             return
 
         status.update(f"Loading {len(sources)} audit(s)…")
         audits = load_many(sources, LoadConfig())
+
+        if not audits:
+            status.update(
+                f"Found {len(sources)} sources but could not read them.\n"
+                "Try running with [bold red]sudo[/] to access /var/log files."
+            )
+            lv.clear()
+            return
 
         def sort_key(a: Audit):
             return a.meta.started_at.timestamp() if a.meta.started_at else 0.0
@@ -123,7 +156,7 @@ class AuditListScreen(Screen):
         for a in audits:
             lv.append(AuditItem(a))
 
-        status.update("Select an audit and press Enter. (r = rescan)")
+        status.update(f"Loaded {len(audits)} audits. Select one and press Enter. (r = rescan)")
         lv.focus()
 
     def action_reload(self) -> None:
@@ -166,7 +199,7 @@ class AuditHomeScreen(Screen):
         meta = self.audit.meta
         host = meta.hostname or "unknown-host"
         date = _fmt_dt(meta.started_at)
-        score = f"{meta.hardening_index}" if meta.hardening_index is not None else "?"
+        score_val = meta.hardening_index if meta.hardening_index is not None else 0
         distro = " ".join(x for x in [meta.distro, meta.distro_version] if x) or "unknown distro"
         kernel = meta.kernel or "unknown kernel"
 
@@ -175,14 +208,14 @@ class AuditHomeScreen(Screen):
                 [
                     f"Audit: {date} — {host}",
                     f"System: {distro} | kernel: {kernel}",
-                    f"Hardening index: {score} | warnings: {len(self.audit.warnings())} | suggestions: {len(self.audit.suggestions())}",
-                    "",
-                    "Pick a category:",
+                    f"Warnings: {len(self.audit.warnings())} | Suggestions: {len(self.audit.suggestions())}",
                 ]
             ),
             id="audit_meta",
         )
 
+        yield ScoreWidget(score_val)
+        yield Label("\nPick a category:", classes="section_title")
         yield ListView(id="category_list")
         yield Footer()
 
@@ -216,6 +249,8 @@ class FindingsScreen(Screen):
         ("/", "focus_search", "Search"),
     ]
 
+    AUTO_FOCUS = "#findings_list"
+
     def __init__(self, audit: Audit, category: str, findings: List[Finding]) -> None:
         super().__init__()
         self.audit = audit
@@ -231,8 +266,7 @@ class FindingsScreen(Screen):
         yield Header(show_clock=True)
         w, s = _category_stats(self._all)
         yield Static(
-            f"{self.category} — items:{len(self._all)} (W:{w} / S:{s})\n"
-            f"[w] Toggle Warn | [s] Toggle Sugg | [/] Search",
+            f"{self.category} — items:{len(self._all)} (W:{w} / S:{s})\n",
             id="findings_title",
         )
         yield Input(placeholder="Filtrer les résultats...", id="finding_search")
@@ -241,7 +275,6 @@ class FindingsScreen(Screen):
 
     def on_mount(self) -> None:
         self._update_view()
-        # [FIX] On force le rendu immédiatement pour éviter la liste vide au démarrage
         self._render_list()
 
     def _update_view(self) -> None:
@@ -442,13 +475,16 @@ class LinisReportApp(App):
     CSS = """
     #status { padding: 1 2; }
     #audit_meta { padding: 1 2; }
-    #findings_title { padding: 1 2; }
-    #detail_scroll { padding: 1 2; }
-    #detail_header { margin-bottom: 1; }
     
-    /* [FIX] Style visuel pour voir que le scroll a le focus */
-    #report_scroll:focus {
-        border: heavy $accent;
+    /* Style pour le nouveau widget de score */
+    ScoreWidget {
+        padding: 1 2;
+        height: auto;
+    }
+    
+    .section_title {
+        padding-left: 2;
+        color: $text-muted;
     }
     """
 

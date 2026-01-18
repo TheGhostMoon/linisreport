@@ -7,35 +7,28 @@ from pathlib import Path
 from typing import List, Optional
 
 from .model import Audit, AuditMeta, AuditSource, Finding, make_audit_id
-# Mise à jour des imports vers les nouvelles fonctions des parsers
 from .parser.report import extract_meta
 from .parser.log import parse_log
 
 
 @dataclass
 class LoadConfig:
-    """
-    - prefer_report_meta : (Optionnel, gardé pour compatibilité)
-    Note: La config du parser de log a été retirée car le nouveau parser est autonome.
-    """
     prefer_report_meta: bool = True
 
 
 def load_audit(source: AuditSource, config: Optional[LoadConfig] = None) -> Audit:
     cfg = config or LoadConfig()
 
-    # 1. Chargement des métadonnées (via lynis-report.dat)
+    # 1. Chargement des métadonnées
     meta = extract_meta(source)
 
-    # Fallback : Si le report n'avait pas de date, on utilise la date du fichier (mtime)
-    # pour avoir un audit_id stable et un tri chronologique correct.
+    # Fallback pour la date si absente du rapport
     if meta.started_at is None:
         meta.started_at = _best_effort_started_at(source)
-        # On régénère l'ID avec la date trouvée
         if meta.started_at:
             meta.audit_id = make_audit_id(source.as_key(), meta.started_at)
 
-    # 2. Chargement des résultats (via lynis.log)
+    # 2. Chargement des résultats
     findings = _load_findings(source)
 
     audit = Audit(meta=meta, findings=findings)
@@ -44,8 +37,28 @@ def load_audit(source: AuditSource, config: Optional[LoadConfig] = None) -> Audi
 
 
 def load_many(sources: List[AuditSource], config: Optional[LoadConfig] = None) -> List[Audit]:
+    """
+    Charge les audits et filtre ceux qui sont illisibles ou vides.
+    """
     cfg = config or LoadConfig()
-    return [load_audit(s, cfg) for s in sources]
+    results = []
+    
+    for s in sources:
+        audit = load_audit(s, cfg)
+        
+        # --- FILTRE DE VALIDITÉ ---
+        # Si on n'a ni score, ni findings, ni hostname, c'est que le fichier 
+        # était probablement illisible (Permission denied) ou vide.
+        is_empty = (
+            audit.meta.hardening_index is None 
+            and not audit.findings
+            and not audit.meta.hostname
+        )
+        
+        if not is_empty:
+            results.append(audit)
+            
+    return results
 
 
 def _load_findings(source: AuditSource) -> List[Finding]:
@@ -53,15 +66,12 @@ def _load_findings(source: AuditSource) -> List[Finding]:
     if not log_path or not log_path.is_file():
         return []
     
-    # Appel direct au nouveau parser simplifié (plus besoin de config)
+    # Si on n'a pas les droits de lecture, parse_log renverra une liste vide
+    # (le try/except est géré dans le parser)
     return parse_log(log_path)
 
 
 def _best_effort_started_at(source: AuditSource) -> Optional[datetime]:
-    """
-    Tente de deviner la date de l'audit en regardant la date de modification
-    des fichiers, si aucune date n'est écrite DANS le rapport.
-    """
     candidates: List[Path] = []
     if source.report_path and source.report_path.exists():
         candidates.append(source.report_path)
