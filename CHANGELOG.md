@@ -4,6 +4,10 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-01-23
+### Fixed
+- Correction du parser de logs : les numéros de ligne sont maintenant correctement extraits de `lynis.log` (ils s'affichaient sous la forme `?` auparavant).
+
 ## [1.1.0] - 2026-01-18
 ### Added
 - **Archivage (Snapshot)** : Touche `a` pour sauvegarder un audit Live (`/var/log`) vers un dossier (`~/.local/share/linisreport/snapshots`).
